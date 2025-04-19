@@ -104,82 +104,144 @@ final class CameraModel: ObservableObject {
         cropRect = rect
     }
     
-    // --- REVERTED Cropping Logic ---
-     func cropImageAndSetFinal(_ image: UIImage) {
-         print("Attempting to crop image...")
-         
-         // 1. Calculate the scale factor between displayed image and actual image
-         let viewBounds = UIScreen.main.bounds
-         let imageSize = image.size
-         let widthScale = viewBounds.width / imageSize.width
-         let heightScale = viewBounds.height / imageSize.height
-         let scale = min(widthScale, heightScale)
-         
-         // 2. Calculate the displayed image's position
-         
-         
-         
-         let displayedImageWidth = imageSize.width * scale
-         let displayedImageHeight = imageSize.height * scale
-         let offsetX = (viewBounds.width - displayedImageWidth) / 2.0
-         let offsetY = (viewBounds.height - displayedImageHeight) / 2.0
-         
-         // 3. Convert screen coordinates to image coordinates
-         
-         
-         
-         let cropRelativeX = cropRect.minX - offsetX
-         let cropRelativeY = cropRect.minY - offsetY
-         
-         // 4. Scale back to original image coordinates
-         
-         
-         
-         let finalScale = 1.0 / scale
-         let finalCropX = cropRelativeX * finalScale
-         let finalCropY = cropRelativeY * finalScale
-         let finalCropWidth = cropRect.width * finalScale
-         let finalCropHeight = cropRect.height * finalScale
-         
-         // 5. Create the final crop zone
+    // --- REVISED Cropping Logic ---
+     func cropImageAndSetFinal(_ image: UIImage, displayFrame: CGRect) {
+         print("\n=== CROP COORDINATES IN NewCameraView (Using Display Frame) ===")
+         print("Original Image Size: \(image.size)")
+         print("Actual Display Frame (Global Coords):")
+         print("  x: \(displayFrame.minX)")
+         print("  y: \(displayFrame.minY)")
+         print("  width: \(displayFrame.width)")
+         print("  height: \(displayFrame.height)")
+         print("Crop Rectangle (Screen Coordinates):")
+         print("  x: \(cropRect.minX)")
+         print("  y: \(cropRect.minY)")
+         print("  width: \(cropRect.width)")
+         print("  height: \(cropRect.height)")
+
+         guard displayFrame.width > 0, displayFrame.height > 0 else {
+             print("Error: Invalid display frame received.")
+             self.finalCroppedImage = image // Default to original if frame is bad
+             return
+         }
+
+         // 1. Calculate the actual scale factor used by .fit within the displayFrame
+         let viewWidth = displayFrame.width
+         let viewHeight = displayFrame.height
+         let imageWidth = image.size.width
+         let imageHeight = image.size.height
+
+         let widthScale = viewWidth / imageWidth
+         let heightScale = viewHeight / imageHeight
+         let scale = min(widthScale, heightScale) // The scale used by .fit
+
+         // 2. Calculate the size of the image as displayed on screen within the displayFrame
+         let displayedImageWidth = imageWidth * scale
+         let displayedImageHeight = imageHeight * scale
+
+         // 3. Calculate the offset of the displayed image within the displayFrame (due to letterboxing/pillarboxing)
+         let offsetX = (viewWidth - displayedImageWidth) / 2.0
+         let offsetY = (viewHeight - displayedImageHeight) / 2.0
+
+         // 4. Calculate the top-left corner of the *actual* displayed image in global coordinates
+         let displayedImageMinX = displayFrame.minX + offsetX
+         let displayedImageMinY = displayFrame.minY + offsetY
+
+         // 5. Convert cropRect coordinates (which are global screen coords) to be relative to the displayed image
+         let cropRelativeX = cropRect.minX - displayedImageMinX
+         let cropRelativeY = cropRect.minY - displayedImageMinY
+
+         // 6. Clamp relative coordinates to be within the displayed image bounds
+         // IMPORTANT: We need to make sure the width/height don't exceed the *displayed* image dimensions from the relative start point
+         let clampedCropRelativeX = max(0, cropRelativeX)
+         let clampedCropRelativeY = max(0, cropRelativeY)
+         // Calculate how much width/height is available from the clamped start point within the displayed image
+         let availableWidth = displayedImageWidth - clampedCropRelativeX
+         let availableHeight = displayedImageHeight - clampedCropRelativeY
+         // Use the smaller of the cropRect's size or the available size
+         let clampedCropRelativeWidth = max(0, min(cropRect.width, availableWidth))
+         let clampedCropRelativeHeight = max(0, min(cropRect.height, availableHeight))
+
+
+         print("\nIntermediate Calculation:")
+         print("  Scale (.fit): \(scale)")
+         print("  Displayed Image Size: \(displayedImageWidth) x \(displayedImageHeight)")
+         print("  Offset within DisplayFrame: x=\(offsetX), y=\(offsetY)")
+         print("  Displayed Image Global Origin: x=\(displayedImageMinX), y=\(displayedImageMinY)")
+         print("  Crop Rect Relative to Displayed Image: x=\(cropRelativeX), y=\(cropRelativeY)")
+         print("  Clamped Relative Crop: x=\(clampedCropRelativeX), y=\(clampedCropRelativeY), w=\(clampedCropRelativeWidth), h=\(clampedCropRelativeHeight)")
+
+
+         // 7. Scale the clamped relative coordinates back to the original image's pixel coordinates
+         let finalScale = 1.0 / scale // Scale from display coords back to original image coords
+         let finalCropX = clampedCropRelativeX * finalScale
+         let finalCropY = clampedCropRelativeY * finalScale
+         let finalCropWidth = clampedCropRelativeWidth * finalScale
+         let finalCropHeight = clampedCropRelativeHeight * finalScale
+
+
+         print("\nFinal Crop Coordinates (Original Image Pixel Coords):")
+         print("  x: \(finalCropX)")
+         print("  y: \(finalCropY)")
+         print("  width: \(finalCropWidth)")
+         print("  height: \(finalCropHeight)")
+
+
+         // 8. Create the final crop zone in the original image's coordinate system
          let cropZone = CGRect(
              x: finalCropX,
              y: finalCropY,
              width: finalCropWidth,
              height: finalCropHeight
          )
-         
-         // 6. Ensure the crop zone is valid within the image bounds
-         let imageRect = CGRect(origin: .zero, size: imageSize)
+
+         // 9. Ensure the crop zone is valid within the original image dimensions
+         // (Technically, clamping in step 6 and 7 should make this mostly redundant, but good failsafe)
+         let imageRect = CGRect(origin: .zero, size: image.size)
          let validCropZone = cropZone.intersection(imageRect)
-         
-         guard validCropZone.width > 0 && validCropZone.height > 0 else {
-             print("Error: Invalid crop zone calculated.")
+
+         // Ensure width and height are positive after intersection
+         guard validCropZone.width > 0, validCropZone.height > 0 else {
+             print("Error: Invalid crop zone calculated after intersection (w=\(validCropZone.width), h=\(validCropZone.height)).")
+             // Maybe provide the original image or a default crop?
+             // For now, let's try setting the original image.
              self.finalCroppedImage = image
              return
          }
-         
-         // 7. Perform the actual cropping
+
+
+         print("\nValidated Crop Zone (Image Pixels):")
+         print("  x: \(validCropZone.minX)")
+         print("  y: \(validCropZone.minY)")
+         print("  width: \(validCropZone.width)")
+         print("  height: \(validCropZone.height)")
+         print("============================================================\n")
+
+
+         // 10. Perform the actual cropping
          guard let cgImage = image.cgImage?.cropping(to: validCropZone) else {
              print("Error: Failed to crop CGImage.")
-             self.finalCroppedImage = image
+             self.finalCroppedImage = image // Fallback
              return
          }
-         
-         // 8. Create the final cropped image
-         
-         
-         
+
+         // 11. Create the final cropped image
          self.finalCroppedImage = UIImage(cgImage: cgImage)
          print("Image cropped successfully and stored in finalCroppedImage.")
      }
 }
 
+// DELETE THE ENTIRE DisplayCroppedView struct
+// struct DisplayCroppedView: View {
+//     ...
+// }
+
 struct CameraView: View {
     @StateObject var model = CameraModel()
     @State var currentZoomFactor: CGFloat = 1.0
-    // Restore imageFrame state
     @State private var imageFrame: CGRect = .zero
+    @State private var displayAreaFrame: CGRect = .zero
+    // @State private var showDisplayCropped = false // Remove this state
     @State private var showMathChat = false
     @Environment(\.presentationMode) var presentationMode
     
@@ -201,12 +263,12 @@ struct CameraView: View {
         }
     }
     
-    // Revert captureButton action
+    // Update captureButton action to pass the displayAreaFrame
     var captureButton: some View {
         Button(action: {
             if let imageToCrop = model.selectedImage {
                 print("Capture button pressed with selected image. Cropping...")
-                model.cropImageAndSetFinal(imageToCrop)
+                model.cropImageAndSetFinal(imageToCrop, displayFrame: displayAreaFrame)
             } else {
                 print("Capture button pressed in camera mode. Capturing photo...")
                 model.capturePhoto()
@@ -409,45 +471,53 @@ struct CameraView: View {
                     .padding(.top, reader.safeAreaInsets.top)
                     .frame(height: 50)
 
-                    // Revert Main Content Area
-                    ZStack {
-                        if let imageToShow = model.selectedImage {
-                            Image(uiImage: imageToShow)
-                                .resizable()
-                                .scaledToFit()
-                        } else {
-                            CameraPreview(session: model.session)
-                                // Revert to DragGesture for zoom
-                                .gesture(
-                                     DragGesture().onChanged({ (val) in
-                                         if abs(val.translation.height) > abs(val.translation.width) {
-                                             let percentage: CGFloat = -(val.translation.height / reader.size.height)
-                                             let calc = currentZoomFactor + percentage
-                                             let zoomFactor: CGFloat = min(max(calc, 1), 5)
-                                             currentZoomFactor = zoomFactor
-                                             model.zoom(with: zoomFactor)
-                                         }
-                                     })
-                                )
-                                .onAppear { model.configure() } // Revert configure logic
-                                .alert(isPresented: $model.showAlertError) {
-                                    Alert(title: Text(model.alertError.title),
-                                          message: Text(model.alertError.message),
-                                          dismissButton: .default(Text(model.alertError.primaryButtonTitle)) {
-                                        model.alertError.primaryAction?()
-                                    })
-                                }
-                                .overlay(
-                                    // Revert overlay logic
-                                    Group { if model.willCapturePhoto { Color.black } }
-                                )
-                                .animation(.easeInOut) // Keep animation?
-                        }
+                    // Main Content Area - WRAP IN GEOMETRY READER TO CAPTURE FRAME
+                    GeometryReader { displayAreaReader in
+                        ZStack {
+                            if let imageToShow = model.selectedImage {
+                                Image(uiImage: imageToShow)
+                                    .resizable()
+                                    .scaledToFit()
+                            } else {
+                                CameraPreview(session: model.session)
+                                    .gesture(
+                                         DragGesture().onChanged({ (val) in
+                                             if abs(val.translation.height) > abs(val.translation.width) {
+                                                 let percentage: CGFloat = -(val.translation.height / reader.size.height)
+                                                 let calc = currentZoomFactor + percentage
+                                                 let zoomFactor: CGFloat = min(max(calc, 1), 5)
+                                                 currentZoomFactor = zoomFactor
+                                                 model.zoom(with: zoomFactor)
+                                             }
+                                         })
+                                    )
+                                    .onAppear { model.configure() }
+                                    .alert(isPresented: $model.showAlertError) {
+                                        Alert(title: Text(model.alertError.title),
+                                              message: Text(model.alertError.message),
+                                              dismissButton: .default(Text(model.alertError.primaryButtonTitle)) {
+                                            model.alertError.primaryAction?()
+                                        })
+                                    }
+                                    .overlay(
+                                        Group { if model.willCapturePhoto { Color.black } }
+                                    )
+                                    .animation(.easeInOut)
+                            }
 
-                        cropOverlay
+                            cropOverlay
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .clipped()
+                        .onAppear {
+                            displayAreaFrame = displayAreaReader.frame(in: .global)
+                            print("Display Area Frame Captured: \(displayAreaFrame)")
+                        }
+                        .onChange(of: displayAreaReader.size) { newSize in
+                            displayAreaFrame = displayAreaReader.frame(in: .global)
+                            print("Display Area Frame Updated: \(displayAreaFrame)")
+                        }
                     }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    // Remove .clipped()
 
                     // Revert Bottom Controls layout
                     HStack {
@@ -466,36 +536,36 @@ struct CameraView: View {
                     .padding(.vertical, 20) // Revert padding
                     .background(Color.black.opacity(0.5)) // Revert background
                 }
-                .edgesIgnoringSafeArea(.bottom) // Restore edgesIgnoringSafeArea
+                .edgesIgnoringSafeArea(.bottom)
             }
-             // Revert onChange logic if necessary, keep it simple
-             .onChange(of: model.finalCroppedImage) { newImage in
+            .onChange(of: model.photo) { newPhoto in
+                guard let pic = newPhoto, let capturedImage = pic.image else { return }
+                guard displayAreaFrame != .zero else {
+                    print("Error: Display area frame not set when photo captured.")
+                    model.selectedImage = capturedImage
+                    return
+                }
+                print("Photo captured, applying crop using display frame...")
+                model.cropImageAndSetFinal(capturedImage, displayFrame: displayAreaFrame)
+            }
+            .onChange(of: model.finalCroppedImage) { newImage in
                  if newImage != nil {
-                      print("Final cropped image detected. Triggering navigation.")
+                      print("Final cropped image available. Showing MathChatView directly.")
                       showMathChat = true
                  }
              }
             .fullScreenCover(isPresented: $showMathChat) {
-                 if let imageToSend = model.finalCroppedImage {
-                      MathChatView(selectedImage: imageToSend)
-                          .onDisappear {
-                              model.finalCroppedImage = nil
-                              model.selectedImage = nil
-                          }
-                 } else {
-                     Text("Error: Could not prepare image for analysis.")
-                         .onAppear {
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
-                                showMathChat = false
-                            }
-                         }
-                 }
-             }
+                if let imageToSend = model.finalCroppedImage {
+                    MathChatView(selectedImage: imageToSend)
+                        .onDisappear {
+                            model.finalCroppedImage = nil
+                            model.selectedImage = nil
+                        }
+                }
+            }
         }
         .sheet(isPresented: $model.isImagePickerPresented) {
-             // Revert Image Picker presentation logic if changed
              ImagePicker(image: $model.selectedImage)
-                // Remove onDisappear added in last step
         }
         .statusBarHidden(true)
     }

@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		ED7FFD722DB31DA900B120CD /* SwiftMath in Frameworks */ = {isa = PBXBuildFile; productRef = ED7FFD712DB31DA900B120CD /* SwiftMath */; };
 		ED8D11DE2DAB16F5005890EC /* SuperwallKit in Frameworks */ = {isa = PBXBuildFile; productRef = ED8D11DD2DAB16F5005890EC /* SuperwallKit */; };
 		EDD670D72DAD85AC002D733B /* FirebaseAnalytics in Frameworks */ = {isa = PBXBuildFile; productRef = EDD670D62DAD85AC002D733B /* FirebaseAnalytics */; };
 		EDD670D92DAD85AC002D733B /* FirebaseAnalyticsOnDeviceConversion in Frameworks */ = {isa = PBXBuildFile; productRef = EDD670D82DAD85AC002D733B /* FirebaseAnalyticsOnDeviceConversion */; };
@@ -80,6 +81,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				ED7FFD722DB31DA900B120CD /* SwiftMath in Frameworks */,
 				EDD670D72DAD85AC002D733B /* FirebaseAnalytics in Frameworks */,
 				EDD670ED2DAD85AC002D733B /* FirebaseFirestore in Frameworks */,
 				EDD670D92DAD85AC002D733B /* FirebaseAnalyticsOnDeviceConversion in Frameworks */,
@@ -190,6 +192,7 @@
 				EDD671002DAD85AC002D733B /* FirebaseStorage */,
 				EDD671022DAD85AC002D733B /* FirebaseStorageCombine-Community */,
 				EDD671042DAD85AC002D733B /* FirebaseVertexAI */,
+				ED7FFD712DB31DA900B120CD /* SwiftMath */,
 			);
 			productName = "Scan Question Helper";
 			productReference = ED8D11952DAB16A0005890EC /* Scan Question Helper.app */;
@@ -276,6 +279,7 @@
 			packageReferences = (
 				ED8D11DC2DAB16F5005890EC /* XCRemoteSwiftPackageReference "Superwall-iOS" */,
 				EDD670D52DAD85AC002D733B /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+				ED7FFD702DB31DA900B120CD /* XCRemoteSwiftPackageReference "SwiftMath" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = ED8D11962DAB16A0005890EC /* Products */;
@@ -648,6 +652,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		ED7FFD702DB31DA900B120CD /* XCRemoteSwiftPackageReference "SwiftMath" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/mgriebling/SwiftMath";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.7.1;
+			};
+		};
 		ED8D11DC2DAB16F5005890EC /* XCRemoteSwiftPackageReference "Superwall-iOS" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/superwall-me/Superwall-iOS";
@@ -667,6 +679,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		ED7FFD712DB31DA900B120CD /* SwiftMath */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = ED7FFD702DB31DA900B120CD /* XCRemoteSwiftPackageReference "SwiftMath" */;
+			productName = SwiftMath;
+		};
 		ED8D11DD2DAB16F5005890EC /* SuperwallKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = ED8D11DC2DAB16F5005890EC /* XCRemoteSwiftPackageReference "Superwall-iOS" */;

@@ -3,6 +3,7 @@ import UIKit
 import FirebaseFirestore
 import CommonCrypto
 import Network
+import SwiftMath  // Add SwiftMath import
 
 // Add network monitor
 class NetworkMonitor: ObservableObject {
@@ -32,18 +33,42 @@ extension Data {
 
 // MARK: - Message Model (ADDED)
 
-// MARK: - API Key Loading (ADDED)
 
 
-// MARK: - Streaming Delegate (ADDED)
 
-    
+
 // MARK: - PreferenceKey for ScrollView Bottom Detection
 struct ScrollViewBottomReachedPreferenceKey: PreferenceKey {
     static var defaultValue: Bool = false
     
     static func reduce(value: inout Bool, nextValue: () -> Bool) {
         value = value || nextValue()
+    }
+}
+
+// MARK: - MathEquationView for rendering LaTeX equations
+struct MathEquationView: UIViewRepresentable {
+    var equation: String
+    var fontSize: CGFloat = 20 // Default font size
+    var textColor: Color = .white // Default text color
+    var labelMode: MTMathUILabelMode = .text // Default to inline
+
+    func makeUIView(context: Context) -> MTMathUILabel {
+        let label = MTMathUILabel()
+        label.labelMode = labelMode
+        label.textAlignment = .left // Adjust as needed
+        label.fontSize = fontSize
+        label.textColor = MTColor(textColor) // Use MTColor initializer
+        // label.font = MTFontManager().font(withName: "LatinModernMath-Regular", size: fontSize) // Optional: Specify font
+        label.latex = equation
+        return label
+    }
+
+    func updateUIView(_ uiView: MTMathUILabel, context: Context) {
+        uiView.latex = equation
+        uiView.fontSize = fontSize
+        uiView.textColor = MTColor(textColor)
+        uiView.labelMode = labelMode
     }
 }
 
@@ -75,15 +100,32 @@ struct MathChatView: View {
                 ScrollView {
                     VStack(spacing: 0) { // Main content VStack
                         // --- Display Cropped Image at Top ---
-                        Image(uiImage: selectedImage)  // Use the exact cropped image
+                        Image(uiImage: selectedImage)
                             .resizable()
-                            .scaledToFit()
+                            .frame(width: selectedImage.size.width, height: selectedImage.size.height)
                             .cornerRadius(12)
-                            .frame(maxWidth: .infinity, maxHeight: UIScreen.main.bounds.height * 0.3)
                             .padding(.horizontal)
                             .padding(.top)
                             .padding(.bottom, 8)
                             .shadow(color: Color.black.opacity(0.2), radius: 5, x: 0, y: 2)
+                            .onAppear {
+                                print("\n=== IMAGE COORDINATES IN MathChatView ===")
+                                print("Image Size: \(selectedImage.size)")
+                                print("Display Frame Size: \(UIScreen.main.bounds.width) x \(UIScreen.main.bounds.height * 0.3)")
+                                
+                                // Calculate the displayed image's position
+                                let viewBounds = UIScreen.main.bounds
+                                let imageSize = selectedImage.size
+                                let offsetX = (viewBounds.width - imageSize.width) / 2.0
+                                let offsetY = ((viewBounds.height * 0.3) - imageSize.height) / 2.0
+                                
+                                print("\nDisplayed Image Coordinates:")
+                                print("  x: \(offsetX)")
+                                print("  y: \(offsetY)")
+                                print("  width: \(imageSize.width)")
+                                print("  height: \(imageSize.height)")
+                                print("===================================\n")
+                            }
 
                         // --- Solution Section ---
                         VStack(alignment: .leading, spacing: 8) {
@@ -294,18 +336,59 @@ struct MathChatView: View {
                     .cornerRadius(10)
                     .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
             } else {
-                // --- Assistant message styling with individual background ---
-                Text(text)
+                botMessageView(text: text)
                     .padding()
-                    // Apply background here instead of container
                     .background(Color.gray.opacity(0.2))
-                    .foregroundColor(Color.white.opacity(0.9))
                     .cornerRadius(10)
-                    .frame(maxWidth: .infinity, alignment: .leading) // Ensure it takes width
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
     }
     
+    // --- NEW VIEW BUILDER FOR BOT MESSAGES WITH LATEX ---
+    @ViewBuilder
+    private func botMessageView(text: String) -> some View {
+        // Split the text by display math delimiter $$ first
+        let displayParts = text.components(separatedBy: "$$")
+        
+        VStack(alignment: .leading, spacing: 8) { // Increased spacing slightly
+            ForEach(0..<displayParts.count, id: \.self) { displayIndex in
+                let displayPart = displayParts[displayIndex].trimmingCharacters(in: .whitespacesAndNewlines)
+                
+                if displayIndex % 2 != 0 { // Content between $$ is display math
+                    if !displayPart.isEmpty {
+                        MathEquationView(equation: displayPart, labelMode: .display)
+                            .frame(maxWidth: .infinity, alignment: .center) // Center display equations
+                            .padding(.vertical, 5)
+                    }
+                } else { // Content outside $$ (could contain inline math or just text)
+                    if !displayPart.isEmpty {
+                        // Split this part further by inline math delimiter $
+                        let inlineParts = displayPart.components(separatedBy: "$")
+                        
+                        // Process inline parts sequentially within this VStack section
+                        ForEach(0..<inlineParts.count, id: \.self) { inlineIndex in
+                            let inlinePart = inlineParts[inlineIndex].trimmingCharacters(in: .whitespacesAndNewlines)
+                            
+                            if !inlinePart.isEmpty {
+                                if inlineIndex % 2 != 0 { // Content between $ is inline math
+                                    MathEquationView(equation: inlinePart, labelMode: .text)
+                                        .fixedSize(horizontal: false, vertical: true) // Allow vertical expansion
+                                        .frame(maxWidth: .infinity, alignment: .leading) // Align left
+                                } else { // Regular text
+                                    Text(inlinePart)
+                                        .foregroundColor(.white) // Ensure regular text color
+                                        .fixedSize(horizontal: false, vertical: true) // Allow text wrapping
+                                        .frame(maxWidth: .infinity, alignment: .leading) // Align left
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     /// Calls the GPT‑4 API with the image encoded in the prompt.
     private func fetchSolution() {
         // Encode the image
@@ -330,14 +413,22 @@ struct MathChatView: View {
         // Build the system message.
         let systemMessage: [String: Any] = [
             "role": "system",
-            "content": "You are a Mathematics tutor. Provide a detailed, step-by-step solution with explanations."
+            "content": """
+            You are a Mathematics tutor. Provide a detailed, step-by-step solution with explanations.
+            ALWAYS format mathematical formulas and expressions using LaTeX syntax.
+            Use single dollar signs ($) for inline math, like $x^2+y^2=z^2$.
+            Use double dollar signs ($$) for display math (equations on their own line), like $$ \\int_a^b f(x) dx = F(b) - F(a) $$.
+            """
         ]
         
         // Build the user message as an array of content objects.
         let userContent: [[String: Any]] = [
             [
                 "type": "text",
-                "text": "This image contains a math problem. Please analyze and provide a detailed explanation."
+                "text": """
+                This image contains a math problem. Please analyze and provide a detailed explanation.
+                Format all mathematical expressions using LaTeX ($inline$ or $$display$$).
+                """
             ],
             [
                 "type": "image_url",
