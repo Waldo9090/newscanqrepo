@@ -231,19 +231,97 @@ final class CameraModel: ObservableObject {
      }
 }
 
-// DELETE THE ENTIRE DisplayCroppedView struct
-// struct DisplayCroppedView: View {
-//     ...
-// }
+// Add new DisplayCroppedView struct
+struct DisplayCroppedView: View {
+    @Environment(\.dismiss) var dismiss
+    @State private var showMathChatView = false
+    let croppedImage: UIImage
+    let selectedSubject: String
+    
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            
+            VStack {
+                // Display the cropped image at its exact size
+                Image(uiImage: croppedImage)
+                    .resizable()
+                    .frame(width: croppedImage.size.width, height: croppedImage.size.height)
+                    .cornerRadius(12)
+                    .padding()
+                    .onAppear {
+                        print("\n=== IMAGE COORDINATES IN DisplayCroppedView ===")
+                        print("Image Size: \(croppedImage.size)")
+                        print("Display Frame Size: \(UIScreen.main.bounds.width) x \(UIScreen.main.bounds.height)")
+                        
+                        // Calculate the displayed image's position
+                        let viewBounds = UIScreen.main.bounds
+                        let imageSize = croppedImage.size
+                        let offsetX = (viewBounds.width - imageSize.width) / 2.0
+                        let offsetY = (viewBounds.height - imageSize.height) / 2.0
+                        
+                        print("\nDisplayed Image Coordinates:")
+                        print("  x: \(offsetX)")
+                        print("  y: \(offsetY)")
+                        print("  width: \(imageSize.width)")
+                        print("  height: \(imageSize.height)")
+                        print("===================================\n")
+                    }
+                
+                Spacer()
+                
+                // Continue button
+                Button(action: {
+                    dismiss()
+                    showMathChatView = true
+                }) {
+                    Text("Continue")
+                        .foregroundColor(.white)
+                        .padding()
+                        .background(Color.blue)
+                        .cornerRadius(10)
+                }
+                .fullScreenCover(isPresented: $showMathChatView) {
+                    MathChatView(image: croppedImage, subject: selectedSubject)
+                }
+            }
+        }
+        .navigationBarBackButtonHidden(true)
+    }
+}
 
 struct CameraView: View {
     @StateObject var model = CameraModel()
     @State var currentZoomFactor: CGFloat = 1.0
+    // Restore imageFrame state
     @State private var imageFrame: CGRect = .zero
     @State private var displayAreaFrame: CGRect = .zero
-    // @State private var showDisplayCropped = false // Remove this state
     @State private var showMathChat = false
     @Environment(\.presentationMode) var presentationMode
+    
+    // Add state for selected subject
+    @State private var selectedSubject: String = "Math"
+    let subjects = ["Chemistry", "Other Tasks", "Math", "Quizzes & Tests", "Physics", "Biology"]
+    
+    // Add color mapping for subjects
+    private func colorForSubject(_ subject: String) -> Color {
+        switch subject {
+        case "Math":
+            return Color(hex: "#FF6B6B").opacity(0.7)  // Softer coral red
+        case "Physics":
+            return Color(hex: "#4ECDC4").opacity(0.7)  // Softer turquoise
+        case "Chemistry":
+            return Color(hex: "#45B7D1").opacity(0.7)  // Softer sky blue
+        case "Biology":
+            return Color(hex: "#96CEB4").opacity(0.7)  // Softer sage green
+        case "Other Tasks":
+            return Color(hex: "#FFBE0B").opacity(0.7)  // Softer golden yellow
+        case "Quizzes & Tests":
+            return Color(hex: "#9B5DE5").opacity(0.7)  // Softer purple
+        default:
+            return Color.gray.opacity(0.7)
+        }
+    }
     
     // REMOVE Debouncer
     
@@ -263,7 +341,7 @@ struct CameraView: View {
         }
     }
     
-    // Update captureButton action to pass the displayAreaFrame
+    // Revert captureButton action
     var captureButton: some View {
         Button(action: {
             if let imageToCrop = model.selectedImage {
@@ -274,14 +352,22 @@ struct CameraView: View {
                 model.capturePhoto()
             }
         }) {
-            Circle()
-                .foregroundColor(.white)
-                .frame(width: 80, height: 80, alignment: .center)
-                .overlay(
-                    Circle()
-                        .stroke(Color.black.opacity(0.8), lineWidth: 2)
-                        .frame(width: 65, height: 65, alignment: .center)
-                )
+            ZStack {
+                // Outer circle with selected subject color
+                Circle()
+                    .foregroundColor(colorForSubject(selectedSubject))
+                    .frame(width: 80, height: 80, alignment: .center)
+                
+                // Inner white circle
+                Circle()
+                    .foregroundColor(.white)
+                    .frame(width: 70, height: 70, alignment: .center)
+                
+                // Selected subject color circle
+                Circle()
+                    .foregroundColor(colorForSubject(selectedSubject))
+                    .frame(width: 65, height: 65, alignment: .center)
+            }
         }
     }
     
@@ -304,6 +390,16 @@ struct CameraView: View {
     // Revert cropOverlay implementation
     var cropOverlay: some View {
         ZStack {
+            // Add instruction text above crop box
+            Text("Crop Only One Problem")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundColor(.white)
+                .padding(.vertical, 8)
+                .padding(.horizontal, 16)
+                .background(Color.black.opacity(0.6))
+                .cornerRadius(8)
+                .position(x: model.cropRect.midX, y: model.cropRect.minY - 40)
+
             // Semi-transparent overlay using original mask approach
             Rectangle()
                 .fill(Color.black.opacity(0.5))
@@ -391,11 +487,19 @@ struct CameraView: View {
             }
              // .frame modifier might have been on Group or individual CornerControls before, adjust if needed
         }
+        
+        
         // Revert outer gesture for moving
+        
+        
         .gesture(
             DragGesture()
                 .onChanged { value in
+                    
+                    
                     // Simple move logic from previous state
+                    
+                    
                     let sensitivity: CGFloat = 0.3 // Or whatever was used
                     let translation = value.translation
                     let newX = model.cropRect.origin.x + (translation.width * sensitivity)
@@ -434,140 +538,205 @@ struct CameraView: View {
         )
     }
     
+    // Break down the subject selector into smaller components
+    private var subjectSelector: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            ScrollViewReader { scrollProxy in
+                HStack(spacing: 25) {
+                    ForEach(subjects, id: \.self) { subject in
+                        subjectText(for: subject)
+                            .id(subject)
+                    }
+                }
+                .padding(.horizontal, UIScreen.main.bounds.width / 3)
+                .gesture(
+                    DragGesture()
+                        .onEnded { value in
+                            handleSubjectSwipe(value: value, scrollProxy: scrollProxy)
+                        }
+                )
+                .onAppear {
+                    centerInitialSubject(scrollProxy: scrollProxy)
+                }
+            }
+        }
+        .frame(height: 60)
+        .padding(.bottom, 20)
+    }
+
+    private func subjectText(for subject: String) -> some View {
+        Text(subject)
+            .font(.system(size: 18, weight: .semibold))
+            .foregroundColor(subject == selectedSubject ? colorForSubject(subject) : .white.opacity(0.5))
+    }
+
+    private func handleSubjectSwipe(value: DragGesture.Value, scrollProxy: ScrollViewProxy) {
+        let horizontalAmount = value.translation.width
+        let swipeThreshold: CGFloat = 50
+        
+        guard abs(horizontalAmount) > swipeThreshold,
+              let currentIndex = subjects.firstIndex(of: selectedSubject) else { return }
+        
+        var nextIndex = currentIndex
+        if horizontalAmount < -swipeThreshold { // Swipe Left
+            nextIndex = (currentIndex + 1) % subjects.count
+        } else if horizontalAmount > swipeThreshold { // Swipe Right
+            nextIndex = (currentIndex - 1 + subjects.count) % subjects.count
+        }
+        
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+            selectedSubject = subjects[nextIndex]
+            scrollProxy.scrollTo(selectedSubject, anchor: .center)
+        }
+    }
+
+    private func centerInitialSubject(scrollProxy: ScrollViewProxy) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            withAnimation {
+                scrollProxy.scrollTo(selectedSubject, anchor: .center)
+            }
+        }
+    }
+    
     var body: some View {
         GeometryReader { reader in
             ZStack {
                 Color.black.edgesIgnoringSafeArea(.all)
                 
                 VStack(spacing: 0) {
-                    // Revert Top Controls layout
-                    HStack {
-                         if model.selectedImage == nil {
-                             Button(action: { model.switchFlash() }) {
-                                 Image(systemName: model.isFlashOn ? "bolt.fill" : "bolt.slash.fill")
-                                     .font(.system(size: 20, weight: .medium, design: .default))
-                                     .frame(width: 44, height: 44)
-                             }
-                             .accentColor(model.isFlashOn ? .yellow : .white)
-                         } else {
-                             Spacer().frame(width: 44, height: 44)
-                         }
-                        
-                         Spacer()
-                         
-                         // Add close button
-                         Button(action: {
-                             presentationMode.wrappedValue.dismiss()
-                         }) {
-                             Image(systemName: "xmark")
-                                 .font(.system(size: 20, weight: .medium))
-                                 .foregroundColor(.white)
-                                 .frame(width: 44, height: 44)
-                                 .background(Color.black.opacity(0.3))
-                                 .clipShape(Circle())
-                         }
-                    }
-                    .padding(.horizontal)
-                    .padding(.top, reader.safeAreaInsets.top)
-                    .frame(height: 50)
+                    // Top Controls
+                    topControls
+                        .padding(.top, reader.safeAreaInsets.top + 8)
+                        .frame(height: 60)
 
-                    // Main Content Area - WRAP IN GEOMETRY READER TO CAPTURE FRAME
-                    GeometryReader { displayAreaReader in
-                        ZStack {
-                            if let imageToShow = model.selectedImage {
-                                Image(uiImage: imageToShow)
-                                    .resizable()
-                                    .scaledToFit()
-                            } else {
-                                CameraPreview(session: model.session)
-                                    .gesture(
-                                         DragGesture().onChanged({ (val) in
-                                             if abs(val.translation.height) > abs(val.translation.width) {
-                                                 let percentage: CGFloat = -(val.translation.height / reader.size.height)
-                                                 let calc = currentZoomFactor + percentage
-                                                 let zoomFactor: CGFloat = min(max(calc, 1), 5)
-                                                 currentZoomFactor = zoomFactor
-                                                 model.zoom(with: zoomFactor)
-                                             }
-                                         })
-                                    )
-                                    .onAppear { model.configure() }
-                                    .alert(isPresented: $model.showAlertError) {
-                                        Alert(title: Text(model.alertError.title),
-                                              message: Text(model.alertError.message),
-                                              dismissButton: .default(Text(model.alertError.primaryButtonTitle)) {
-                                            model.alertError.primaryAction?()
-                                        })
-                                    }
-                                    .overlay(
-                                        Group { if model.willCapturePhoto { Color.black } }
-                                    )
-                                    .animation(.easeInOut)
-                            }
-
-                            cropOverlay
-                        }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .clipped()
-                        .onAppear {
-                            displayAreaFrame = displayAreaReader.frame(in: .global)
-                            print("Display Area Frame Captured: \(displayAreaFrame)")
-                        }
-                        .onChange(of: displayAreaReader.size) { newSize in
-                            displayAreaFrame = displayAreaReader.frame(in: .global)
-                            print("Display Area Frame Updated: \(displayAreaFrame)")
-                        }
-                    }
-
-                    // Revert Bottom Controls layout
-                    HStack {
-                        galleryButton
-                        Spacer()
-                        captureButton
-                        Spacer()
-                        if model.selectedImage == nil {
-                            flipCameraButton
-                        } else {
-                            // Revert spacer logic
-                            Spacer().frame(width: 45)
-                        }
-                    }
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 20) // Revert padding
-                    .background(Color.black.opacity(0.5)) // Revert background
+                    // Main Content
+                    mainContent
+                    
+                    // Subject Selector
+                    subjectSelector
+                    
+                    // Bottom Controls
+                    bottomControls
                 }
+                .background(Color.black.opacity(0.6))
                 .edgesIgnoringSafeArea(.bottom)
             }
-            .onChange(of: model.photo) { newPhoto in
-                guard let pic = newPhoto, let capturedImage = pic.image else { return }
-                guard displayAreaFrame != .zero else {
-                    print("Error: Display area frame not set when photo captured.")
-                    model.selectedImage = capturedImage
-                    return
-                }
-                print("Photo captured, applying crop using display frame...")
-                model.cropImageAndSetFinal(capturedImage, displayFrame: displayAreaFrame)
-            }
             .onChange(of: model.finalCroppedImage) { newImage in
-                 if newImage != nil {
-                      print("Final cropped image available. Showing MathChatView directly.")
-                      showMathChat = true
-                 }
-             }
+                if newImage != nil {
+                    print("Final cropped image detected. Showing DisplayCroppedView.")
+                    showMathChat = true
+                }
+            }
             .fullScreenCover(isPresented: $showMathChat) {
                 if let imageToSend = model.finalCroppedImage {
-                    MathChatView(selectedImage: imageToSend)
+                    MathChatView(image: imageToSend, subject: selectedSubject)
                         .onDisappear {
                             model.finalCroppedImage = nil
                             model.selectedImage = nil
                         }
                 }
             }
+            .sheet(isPresented: $model.isImagePickerPresented) {
+                ImagePicker(image: $model.selectedImage)
+            }
+            .statusBarHidden(true)
         }
-        .sheet(isPresented: $model.isImagePickerPresented) {
-             ImagePicker(image: $model.selectedImage)
+    }
+
+    // Break down the camera controls into separate views
+    private var topControls: some View {
+        HStack {
+            Button(action: {
+                presentationMode.wrappedValue.dismiss()
+            }) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundColor(.white)
+                    .frame(width: 44, height: 44)
+                    .background(Color.black.opacity(0.6))
+                    .clipShape(Circle())
+            }
+            .padding(.leading, 16)
+            
+            Spacer()
+            
+            if model.selectedImage == nil {
+                Button(action: { model.switchFlash() }) {
+                    Image(systemName: model.isFlashOn ? "bolt.fill" : "bolt.slash.fill")
+                        .font(.system(size: 20, weight: .medium))
+                        .frame(width: 44, height: 44)
+                }
+                .accentColor(model.isFlashOn ? .yellow : .white)
+                .padding(.trailing, 16)
+            }
         }
-        .statusBarHidden(true)
+    }
+
+    private var bottomControls: some View {
+        HStack {
+            galleryButton
+            Spacer()
+            captureButton
+            Spacer()
+            if model.selectedImage == nil {
+                flipCameraButton
+            } else {
+                Spacer().frame(width: 45)
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.bottom, 30)
+    }
+
+    private var mainContent: some View {
+        GeometryReader { displayAreaReader in
+            ZStack {
+                if let imageToShow = model.selectedImage {
+                    Image(uiImage: imageToShow)
+                        .resizable()
+                        .scaledToFit()
+                } else {
+                    CameraPreview(session: model.session)
+                        .gesture(
+                            DragGesture().onChanged({ (val) in
+                                if abs(val.translation.height) > abs(val.translation.width) {
+                                    let percentage: CGFloat = -(val.translation.height / UIScreen.main.bounds.height)
+                                    let calc = currentZoomFactor + percentage
+                                    let zoomFactor: CGFloat = min(max(calc, 1), 5)
+                                    currentZoomFactor = zoomFactor
+                                    model.zoom(with: zoomFactor)
+                                }
+                            })
+                        )
+                        .onAppear { model.configure() }
+                        .alert(isPresented: $model.showAlertError) {
+                            Alert(
+                                title: Text(model.alertError.title),
+                                message: Text(model.alertError.message),
+                                dismissButton: .default(Text(model.alertError.primaryButtonTitle)) {
+                                    model.alertError.primaryAction?()
+                                }
+                            )
+                        }
+                        .overlay(
+                            Group { if model.willCapturePhoto { Color.black } }
+                        )
+                        .animation(.easeInOut)
+                }
+
+                cropOverlay
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipped()
+            .onAppear {
+                displayAreaFrame = displayAreaReader.frame(in: .global)
+                print("Display Area Frame Captured: \(displayAreaFrame)")
+            }
+            .onChange(of: displayAreaReader.size) { newSize in
+                displayAreaFrame = displayAreaReader.frame(in: .global)
+                print("Display Area Frame Updated: \(displayAreaFrame)")
+            }
+        }
     }
 }
 
@@ -575,10 +744,10 @@ struct CameraView: View {
 struct CornerControl: View {
     let color: Color
     var body: some View {
-        Rectangle()
+        Circle() // Changed from Rectangle to Circle
             .fill(color)
-             .frame(width: 20, height: 20) // Restore original size?
-            .overlay(Rectangle().stroke(Color.white, lineWidth: 1))
+             .frame(width: 20, height: 20) // Keep frame for consistent size
+            .overlay(Circle().stroke(Color.white, lineWidth: 1)) // Changed overlay to Circle
              // Remove background hit area added last step
     }
 }
